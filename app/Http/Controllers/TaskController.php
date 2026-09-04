@@ -80,29 +80,42 @@ class TaskController extends Controller
     {
         $validated = $request->validate([
             'taskId' => 'required|exists:tasks,id',
-            'order' => 'required|array',
-            'order.*.id' => 'required|exists:tasks,id',
-            'order.*.priority' => 'required|integer|min:0',
+            'previousTaskId' => 'nullable|exists:tasks,id',
+            'nextTaskId' => 'nullable|exists:tasks,id',
         ]);
 
         $taskId = $validated['taskId'];
-        $allTasks = Task::orderBy('priority')->get()->keyBy('id');
-        $newIndex = collect($validated['order'])->pluck('id')->search($taskId);
+        $previousTaskId = $validated['previousTaskId'];
+        $nextTaskId = $validated['nextTaskId'];
 
-        $prevPriority = 0;
-        $nextPriority = PHP_INT_MAX;
-
-        if ($newIndex > 0) {
-            $prevTaskId = $validated['order'][$newIndex - 1]['id'];
-            $prevPriority = $allTasks[$prevTaskId]->priority;
+        if ($previousTaskId) {
+            $prevPriority = Task::where('id', $previousTaskId)->value('priority');
+        } else {
+            $prevPriority = 0;
         }
 
-        if ($newIndex < count($validated['order']) - 1) {
-            $nextTaskId = $validated['order'][$newIndex + 1]['id'];
-            $nextPriority = $allTasks[$nextTaskId]->priority;
+        if ($nextTaskId) {
+            $nextPriority = Task::where('id', $nextTaskId)->value('priority');
+        } else {
+            $nextPriority = 0;
         }
-
-        $newPriority = $this->findMidpoint($prevPriority, $nextPriority);
+        if ($nextPriority !== 0 && $prevPriority !== 0) {
+            $newPriority = $this->findMidpoint($prevPriority, $nextPriority);
+        } elseif ($nextPriority === 0 && $prevPriority !== 0) {
+            $candidate = $prevPriority + 1;
+            while (Task::where('priority', $candidate)->exists()) {
+                $candidate++;
+            }
+            $newPriority = $candidate;
+        } elseif ($nextPriority !== 0 && $prevPriority === 0) {
+            $candidate = $nextPriority - 1;
+            while (Task::where('priority', $candidate)->exists()) {
+                $candidate--;
+            }
+            $newPriority = $candidate;
+        } else {
+            $newPriority = 1000; // Default priority if both are zero
+        }
 
         Task::where('id', $taskId)->update(['priority' => $newPriority]);
 
