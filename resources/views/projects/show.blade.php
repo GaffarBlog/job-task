@@ -29,12 +29,7 @@
             @forelse ($project->tasks->sortBy('priority') as $task)
                 <div class="bg-white rounded-lg shadow p-4 mb-3 flex items-center gap-4">
                     <div class="flex-1">
-                        <div class="flex items-center gap-2">
-                            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
-                                #{{ $task->priority }}
-                            </span>
-                            <a href="{{ route('tasks.show', $task) }}" class="font-medium text-gray-900 hover:text-blue-600">{{ $task->name }}</a>
-                        </div>
+                        <a href="{{ route('tasks.show', $task) }}" class="font-medium text-gray-900 hover:text-blue-600">{{ $task->name }}</a>
                         @if ($task->description)
                             <p class="text-sm text-gray-500 mt-1">{{ Str::limit($task->description, 80) }}</p>
                         @endif

@@ -11,7 +11,9 @@ class TaskController extends Controller
 {
     public function index()
     {
-        $tasks = Task::with('project')->latest()->paginate(10);
+        $tasks = Task::with('project')->orderBy('priority')->paginate(10);
+
+        // return $tasks;
 
         return view('tasks.index', compact('tasks'));
     }
@@ -31,9 +33,9 @@ class TaskController extends Controller
             'description' => 'nullable|string',
         ]);
 
-        $maxPriority = Task::where('project_id', $validated['project_id'])->max('priority') ?? 0;
+        $maxPriority = Task::max('priority') ?? 0;
 
-        $validated['priority'] = $maxPriority + 1;
+        $validated['priority'] = $maxPriority + 1000;
 
         Task::create($validated);
 
@@ -77,15 +79,44 @@ class TaskController extends Controller
     public function updatePriority(Request $request): JsonResponse
     {
         $validated = $request->validate([
+            'taskId' => 'required|exists:tasks,id',
             'order' => 'required|array',
             'order.*.id' => 'required|exists:tasks,id',
             'order.*.priority' => 'required|integer|min:0',
         ]);
 
-        foreach ($validated['order'] as $item) {
-            Task::where('id', $item['id'])->update(['priority' => $item['priority']]);
+        $taskId = $validated['taskId'];
+        $allTasks = Task::orderBy('priority')->get()->keyBy('id');
+        $newIndex = collect($validated['order'])->pluck('id')->search($taskId);
+
+        $prevPriority = 0;
+        $nextPriority = PHP_INT_MAX;
+
+        if ($newIndex > 0) {
+            $prevTaskId = $validated['order'][$newIndex - 1]['id'];
+            $prevPriority = $allTasks[$prevTaskId]->priority;
         }
 
+        if ($newIndex < count($validated['order']) - 1) {
+            $nextTaskId = $validated['order'][$newIndex + 1]['id'];
+            $nextPriority = $allTasks[$nextTaskId]->priority;
+        }
+
+        $newPriority = $this->findMidpoint($prevPriority, $nextPriority);
+
+        Task::where('id', $taskId)->update(['priority' => $newPriority]);
+
         return response()->json(['message' => 'Priority updated successfully.']);
+    }
+
+    private function findMidpoint(int $prev, int $next): int
+    {
+        $candidate = intdiv($prev + $next, 2);
+
+        while (Task::where('priority', $candidate)->exists()) {
+            $candidate++;
+        }
+
+        return $candidate;
     }
 }

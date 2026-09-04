@@ -15,11 +15,11 @@ Route::controller(TaskController::class)->group(function () {
     Route::get('/tasks', 'index')->name('tasks.index');
     Route::get('/tasks/create', 'create')->name('tasks.create');
     Route::post('/tasks', 'store')->name('tasks.store');
+    Route::put('/tasks/priority', 'updatePriority')->name('tasks.updatePriority');
     Route::get('/tasks/{task}', 'show')->name('tasks.show');
     Route::get('/tasks/{task}/edit', 'edit')->name('tasks.edit');
     Route::put('/tasks/{task}', 'update')->name('tasks.update');
     Route::delete('/tasks/{task}', 'destroy')->name('tasks.destroy');
-    Route::put('/tasks/priority', 'updatePriority')->name('tasks.updatePriority');
 });
 Route::controller(ProjectController::class)->group(function () {
     Route::get('/projects', 'index')->name('projects.index');

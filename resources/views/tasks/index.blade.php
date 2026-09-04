@@ -13,19 +13,14 @@
 
     <div id="task-list" data-sortable>
         @forelse ($tasks as $task)
-            <div class="bg-white rounded-lg shadow p-4 mb-3 flex items-center gap-4 cursor-move" data-task-id="{{ $task->id }}">
+            <div class="bg-white rounded-lg shadow p-4 mb-3 flex items-center gap-4 cursor-move draggable-item" data-task-id="{{ $task->id }}">
                 <div class="drag-handle text-gray-400 hover:text-gray-600">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                         <path d="M7 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM13 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM7 8a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM13 8a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM7 14a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM13 14a2 2 0 1 0 0 4 2 2 0 0 0 0-4z" />
                     </svg>
                 </div>
                 <div class="flex-1">
-                    <div class="flex items-center gap-2">
-                        <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
-                            #{{ $task->priority }}
-                        </span>
-                        <a href="{{ route('tasks.show', $task) }}" class="font-medium text-gray-900 hover:text-blue-600">{{ $task->name }}</a>
-                    </div>
+                    <a href="{{ route('tasks.show', $task) }}" class="font-medium text-gray-900 hover:text-blue-600">{{ $task->name }}</a>
                     <div class="flex items-center gap-2 mt-1">
                         <a href="{{ route('projects.show', $task->project) }}" class="text-sm text-blue-600 hover:underline">{{ $task->project->name }}</a>
                         @if ($task->description)

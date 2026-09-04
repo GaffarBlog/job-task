@@ -6,9 +6,11 @@ document.addEventListener('DOMContentLoaded', () => {
             handle: '.drag-handle',
             animation: 150,
             ghostClass: 'bg-blue-50',
-            onEnd: function () {
+            draggable: '.draggable-item',
+            onEnd: function (evt) {
+                const taskId = evt.item.dataset.taskId;
                 const items = el.querySelectorAll('[data-task-id]');
-                const order = Array.from(items).map((item, index) => ({
+                const newOrder = Array.from(items).map((item, index) => ({
                     id: item.dataset.taskId,
                     priority: index + 1
                 }));
@@ -20,16 +22,14 @@ document.addEventListener('DOMContentLoaded', () => {
                         'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
                         'Accept': 'application/json'
                     },
-                    body: JSON.stringify({ order })
+                    body: JSON.stringify({ taskId, order: newOrder })
                 }).then(response => {
-                    if (response.ok) {
-                        items.forEach((item, index) => {
-                            const badge = item.querySelector('.inline-flex');
-                            if (badge) {
-                                badge.textContent = `#${index + 1}`;
-                            }
-                        });
+                    if (!response.ok) {
+                        throw new Error('Network response was not ok');
                     }
+                    return response.json();
+                }).catch(error => {
+                    console.error('Error updating priority:', error);
                 });
             }
         });

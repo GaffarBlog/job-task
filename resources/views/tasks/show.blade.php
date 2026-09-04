@@ -17,15 +17,6 @@
             </div>
 
             <div class="mb-4">
-                <h3 class="text-sm font-medium text-gray-500">Priority</h3>
-                <p class="mt-1">
-                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                        #{{ $task->priority }}
-                    </span>
-                </p>
-            </div>
-
-            <div class="mb-4">
                 <h3 class="text-sm font-medium text-gray-500">Description</h3>
                 <p class="mt-1 text-gray-900">{{ $task->description ?? 'No description' }}</p>
             </div>
