@@ -76,6 +76,42 @@ class TaskController extends Controller
         return redirect()->route('tasks.index')->with('success', 'Task deleted successfully.');
     }
 
+    // public function updatePriority(Request $request): JsonResponse
+    // {
+    //     $validated = $request->validate([
+    //         'taskId' => 'required|exists:tasks,id',
+    //         'previousTaskId' => 'nullable|exists:tasks,id',
+    //         'nextTaskId' => 'nullable|exists:tasks,id',
+    //     ]);
+
+    //     $taskId = $validated['taskId'];
+    //     $previousTaskId = $validated['previousTaskId'];
+    //     $nextTaskId = $validated['nextTaskId'];
+
+    //     if ($previousTaskId) {
+    //         $prevPriority = Task::where('id', $previousTaskId)->value('priority');
+    //     } else {
+    //         $prevPriority = 0;
+    //     }
+
+    //     if ($nextTaskId) {
+    //         $nextPriority = Task::where('id', $nextTaskId)->value('priority');
+    //     } else {
+    //         $nextPriority = 0;
+    //     }
+    //     if ($nextPriority === 0 && $prevPriority !== 0) {
+    //         $nextPriority = Task::where('priority', '>', $prevPriority)->orderBy('priority')->value('priority') ?? Task::max('priority') + 1000;
+    //     } elseif ($nextPriority !== 0 && $prevPriority === 0) {
+    //         $prevPriority = Task::where('priority', '<', $nextPriority)->orderBy('priority', 'desc')->value('priority') ?? 1;
+    //     } else {
+    //         $newPriority = 1000; // Default priority if both are zero
+    //     }
+    //     $newPriority = $this->findMidpoint($prevPriority, $nextPriority);
+    //     Task::where('id', $taskId)->update(['priority' => $newPriority]);
+
+    //     return response()->json(['message' => 'Priority updated successfully.']);
+    // }
+
     public function updatePriority(Request $request): JsonResponse
     {
         $validated = $request->validate([
@@ -84,30 +120,29 @@ class TaskController extends Controller
             'nextTaskId' => 'nullable|exists:tasks,id',
         ]);
 
-        $taskId = $validated['taskId'];
-        $previousTaskId = $validated['previousTaskId'];
-        $nextTaskId = $validated['nextTaskId'];
+        $prevPriority = $validated['previousTaskId']
+            ? Task::where('id', $validated['previousTaskId'])->value('priority')
+            : 0;
 
-        if ($previousTaskId) {
-            $prevPriority = Task::where('id', $previousTaskId)->value('priority');
-        } else {
-            $prevPriority = 0;
+        $nextPriority = $validated['nextTaskId']
+            ? Task::where('id', $validated['nextTaskId'])->value('priority')
+            : 0;
+
+        if ($prevPriority === 0 && $nextPriority !== 0) {
+            // Dropped at the very top: find the task just before the next one
+            $prevPriority = Task::where('priority', '<', $nextPriority)
+                ->orderByDesc('priority')
+                ->value('priority') ?? 1;
+        } elseif ($nextPriority === 0 && $prevPriority !== 0) {
+            // Dropped at the very bottom: find the task just after the previous one
+            $nextPriority = Task::where('priority', '>', $prevPriority)
+                ->orderBy('priority')
+                ->value('priority') ?? Task::max('priority') + 1000;
         }
 
-        if ($nextTaskId) {
-            $nextPriority = Task::where('id', $nextTaskId)->value('priority');
-        } else {
-            $nextPriority = 0;
-        }
-        if ($nextPriority === 0 && $prevPriority !== 0) {
-            $nextPriority = Task::where('priority', '>', $prevPriority)->orderBy('priority')->value('priority') ?? Task::max('priority') + 1000;
-        } elseif ($nextPriority !== 0 && $prevPriority === 0) {
-            $prevPriority = Task::where('priority', '<', $nextPriority)->orderBy('priority', 'desc')->value('priority') ?? 1;
-        } else {
-            $newPriority = 1000; // Default priority if both are zero
-        }
         $newPriority = $this->findMidpoint($prevPriority, $nextPriority);
-        Task::where('id', $taskId)->update(['priority' => $newPriority]);
+
+        Task::where('id', $validated['taskId'])->update(['priority' => $newPriority]);
 
         return response()->json(['message' => 'Priority updated successfully.']);
     }
