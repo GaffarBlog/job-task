@@ -1,58 +1,264 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# Task Manager - Drag & Drop Priority Ordering
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+A modern task management application built with Laravel featuring **drag-and-drop priority reordering** for tasks using a midpoint-based priority algorithm.
 
-## About Laravel
+---
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+## Tech Stack
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+| Layer       | Technology                                  |
+|-------------|---------------------------------------------|
+| Backend     | Laravel 13.x, PHP 8.3                      |
+| Frontend    | Vanilla JS, Tailwind CSS v4, Vite 8        |
+| DnD Engine  | SortableJS 1.15                            |
+| Database    | SQLite                                     |
+| Testing     | Pest PHP 4.7                              |
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+---
 
-## Learning Laravel
+## Installation
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
+### Prerequisites
 
-In addition, [Laracasts](https://laracasts.com) contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+- PHP >= 8.3
+- Composer
+- Node.js & npm
 
-You can also watch bite-sized lessons with real-world projects on [Laravel Learn](https://laravel.com/learn), where you will be guided through building a Laravel application from scratch while learning PHP fundamentals.
+### Quick Setup
 
-## Agentic Development
+Run the one-liner setup script:
 
-Laravel's predictable structure and conventions make it ideal for AI coding agents like Claude Code, Cursor, and GitHub Copilot. Install [Laravel Boost](https://laravel.com/docs/ai) to supercharge your AI workflow:
-
-```bash
-composer require laravel/boost --dev
-
-php artisan boost:install
+```sh
+composer setup
 ```
 
-Boost provides your agent 15+ tools and skills that help agents build Laravel applications while following best practices.
+This will:
+1. Install PHP dependencies
+2. Create `.env` file and generate app key
+3. Run database migrations
+4. Install npm dependencies
+5. Build frontend assets
 
-## Contributing
+### Manual Setup
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+```sh
+# Clone the repository
+git clone <your-repo-url>
+cd job-task
 
-## Code of Conduct
+# Install PHP dependencies
+composer install
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+# Environment setup
+cp .env.example .env
+php artisan key:generate
 
-## Security Vulnerabilities
+# Database
+touch database/database.sqlite
+php artisan migrate
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+# Seed sample data (10 projects, 110 tasks)
+php artisan db:seed
+
+# Frontend assets
+npm install
+npm run build
+```
+
+### Running the App
+
+```sh
+composer dev
+```
+
+This starts the Laravel server, queue worker, and Vite dev server concurrently. Visit [http://localhost:8000](http://localhost:8000).
+
+---
+
+## Features
+
+- **Dashboard** - Overview showing total tasks and projects count
+- **Projects** - Full CRUD with paginated listing (name + description)
+- **Tasks** - Full CRUD with project association, description, and priority
+- **Drag & Drop Reordering** - Visually reorder task priorities by dragging
+
+---
+
+## How Drag & Drop Priority Ordering Works
+
+This is the most interesting part of the project. The system uses a **midpoint-based priority algorithm** with gap spacing to avoid re-indexing all tasks on every reorder.
+
+### The Problem
+
+When a user drags a task to a new position, you need to update the `priority` column so the task list reflects the new order. A naive approach (renumbering all tasks sequentially) requires N database updates per drag. This is inefficient and creates race conditions.
+
+### The Solution: Midpoint Insertion
+
+Instead of sequential integers, tasks are assigned priorities with large gaps between them. When a task is moved, we calculate a new priority **between** its new neighbors — no need to touch any other records.
+
+#### Step 1: Initial Spacing
+
+When a new task is created, it gets the next available priority with a gap of **1000**:
+
+```php
+$maxPriority = Task::max('priority') ?? 0;
+$validated['priority'] = $maxPriority + 1000;
+```
+
+This creates initial priorities like: `1000, 2000, 3000, 4000, ...`
+
+#### Step 2: Detecting the Drop Position
+
+When a user drops a task, the frontend captures the **previous sibling** and **next sibling** task IDs:
+
+```javascript
+onEnd: function (evt) {
+    const item = evt.item;
+    const taskId = item.dataset.taskId;
+    const previousTaskId = item.previousElementSibling?.dataset.taskId ?? null;
+    const nextTaskId = item.nextElementSibling?.dataset.taskId ?? null;
+
+    fetch("/tasks/priority", {
+        method: "PUT",
+        body: JSON.stringify({ taskId, previousTaskId, nextTaskId }),
+    });
+}
+```
+
+#### Step 3: Calculating the New Priority
+
+The backend receives `taskId`, `previousTaskId`, and `nextTaskId`, then determines the new priority:
+
+```php
+private function calculatePriority(?int $previousPriority, ?int $nextPriority): int
+{
+    // Between two tasks
+    if ($previousPriority !== null && $nextPriority !== null) {
+        return $this->findMidpoint($previousPriority, $nextPriority);
+    }
+
+    // End of list
+    if ($previousPriority !== null) {
+        return $this->getNextAvailablePriority($previousPriority + 1);
+    }
+
+    // Beginning of list
+    if ($nextPriority !== null) {
+        return $this->getPreviousAvailablePriority($nextPriority - 1);
+    }
+
+    return 1000; // Only task
+}
+```
+
+**Three scenarios:**
+
+| Position | Neighbors | Calculation |
+|----------|-----------|-------------|
+| Between two tasks | prev + next exist | `intdiv(prev + next, 2)`, then find next free slot |
+| End of list | only prev | Increment from `prev + 1` until free |
+| Beginning of list | only next | Decrement from `next - 1` until free |
+
+#### Step 4: Finding the Midpoint
+
+```php
+private function findMidpoint(int $prev, int $next): int
+{
+    $candidate = intdiv($prev + $next, 2);
+
+    // If midpoint is taken, increment until we find a free slot
+    while (Task::where('priority', $candidate)->exists()) {
+        $candidate++;
+    }
+
+    return $candidate;
+}
+```
+
+### Visual Example
+
+```
+Before drag:
+  Task A (priority: 1000)
+  Task B (priority: 2000)
+  Task C (priority: 3000)
+  Task D (priority: 4000)
+
+Drag Task D between Task A and Task B:
+  previousTaskId = A (priority 1000)
+  nextTaskId = B (priority 2000)
+
+  midpoint = (1000 + 2000) / 2 = 1500
+  Task D gets priority 1500
+
+After drag:
+  Task A (1000)
+  Task D (1500)  ← moved here
+  Task B (2000)
+  Task C (3000)
+```
+
+### Why This Works Well
+
+- **Single-row update** — Only the dragged task's row is updated, regardless of list size
+- **No race conditions** — No bulk updates means no conflicting writes
+- **Handles edge cases** — Moving to start, end, or between any two tasks
+- **Collision resolution** — If the midpoint is taken, the algorithm finds the next available slot
+
+### Limitation
+
+The midpoint gap converges over many reorders between the same two tasks. After ~30 reorders between the same pair (depending on initial spacing), priorities may need a full re-index. The initial gap of 1000 provides ample room for typical usage.
+
+---
+
+## Database Structure
+
+```
+projects
+  id              BIGINT (PK)
+  name            STRING
+  description     TEXT (nullable)
+  created_at      TIMESTAMP
+  updated_at      TIMESTAMP
+
+tasks
+  id              BIGINT (PK)
+  name            STRING
+  project_id      BIGINT (FK → projects.id, ON DELETE CASCADE)
+  description     TEXT (nullable)
+  priority        INTEGER (default: 0)
+  created_at      TIMESTAMP
+  updated_at      TIMESTAMP
+```
+
+**Relationships:** `Project` has many `Task`s. `Task` belongs to a `Project`.
+
+---
+
+## Project Structure
+
+```
+app/
+├── Http/Controllers/
+│   ├── DashboardController.php   # Dashboard stats
+│   ├── ProjectController.php     # Project CRUD
+│   └── TaskController.php        # Task CRUD + priority update
+├── Models/
+│   ├── Project.php
+│   └── Task.php
+resources/
+├── views/
+│   ├── layouts/main.blade.php    # Base layout
+│   ├── dashboard/index.blade.php
+│   ├── tasks/                    # Task views (index, create, edit, show)
+│   └── projects/                 # Project views (index, create, edit, show)
+└── js/app.js                     # SortableJS drag & drop logic
+routes/
+└── web.php                       # All routes
+```
+
+---
 
 ## License
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+MIT

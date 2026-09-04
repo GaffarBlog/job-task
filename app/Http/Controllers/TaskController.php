@@ -88,74 +88,28 @@ class TaskController extends Controller
         $previousTaskId = $validated['previousTaskId'];
         $nextTaskId = $validated['nextTaskId'];
 
-        $previousPriority = $previousTaskId
-            ? Task::whereKey($previousTaskId)->value('priority')
-            : null;
-
-        $nextPriority = $nextTaskId
-            ? Task::whereKey($nextTaskId)->value('priority')
-            : null;
-
-        $newPriority = $this->calculatePriority(
-            $previousPriority,
-            $nextPriority
-        );
-
-        Task::whereKey($taskId)->update([
-            'priority' => $newPriority,
-        ]);
-
-        return response()->json([
-            'message' => 'Priority updated successfully.',
-        ]);
-    }
-
-    private function calculatePriority(
-        ?int $previousPriority,
-        ?int $nextPriority
-    ): int {
-        // Moving between two tasks
-        if ($previousPriority !== null && $nextPriority !== null) {
-            return $this->findMidpoint(
-                $previousPriority,
-                $nextPriority
-            );
+        if ($previousTaskId) {
+            $prevPriority = Task::where('id', $previousTaskId)->value('priority');
+        } else {
+            $prevPriority = 0;
         }
 
-        // Moving to the end of the list
-        if ($previousPriority !== null) {
-            return $this->getNextAvailablePriority(
-                $previousPriority + 1
-            );
+        if ($nextTaskId) {
+            $nextPriority = Task::where('id', $nextTaskId)->value('priority');
+        } else {
+            $nextPriority = 0;
         }
-
-        // Moving to the beginning of the list
-        if ($nextPriority !== null) {
-            return $this->getPreviousAvailablePriority(
-                $nextPriority - 1
-            );
+        if ($nextPriority === 0 && $prevPriority !== 0) {
+            $nextPriority = Task::where('priority', '>', $prevPriority)->orderBy('priority')->value('priority') ?? Task::max('priority') + 1000;
+        } elseif ($nextPriority !== 0 && $prevPriority === 0) {
+            $prevPriority = Task::where('priority', '<', $nextPriority)->orderBy('priority', 'desc')->value('priority') ?? 1;
+        } else {
+            $newPriority = 1000; // Default priority if both are zero
         }
+        $newPriority = $this->findMidpoint($prevPriority, $nextPriority);
+        Task::where('id', $taskId)->update(['priority' => $newPriority]);
 
-        // No neighbouring tasks
-        return 1000;
-    }
-
-    private function getNextAvailablePriority(int $priority): int
-    {
-        while (Task::where('priority', $priority)->exists()) {
-            $priority++;
-        }
-
-        return $priority;
-    }
-
-    private function getPreviousAvailablePriority(int $priority): int
-    {
-        while (Task::where('priority', $priority)->exists()) {
-            $priority--;
-        }
-
-        return $priority;
+        return response()->json(['message' => 'Priority updated successfully.']);
     }
 
     private function findMidpoint(int $prev, int $next): int
