@@ -6,13 +6,13 @@ A modern task management application built with Laravel featuring **drag-and-dro
 
 ## Tech Stack
 
-| Layer       | Technology                                  |
-|-------------|---------------------------------------------|
-| Backend     | Laravel 13.x, PHP 8.3                      |
-| Frontend    | Vanilla JS, Tailwind CSS v4, Vite 8        |
-| DnD Engine  | SortableJS 1.15                            |
-| Database    | SQLite                                     |
-| Testing     | Pest PHP 4.7                              |
+| Layer      | Technology                          |
+| ---------- | ----------------------------------- |
+| Backend    | Laravel 13.x, PHP 8.3               |
+| Frontend   | Vanilla JS, Tailwind CSS v4, Vite 8 |
+| DnD Engine | SortableJS 1.15                     |
+| Database   | MySQL                               |
+| Testing    | Pest PHP 4.7                        |
 
 ---
 
@@ -33,6 +33,7 @@ composer setup
 ```
 
 This will:
+
 1. Install PHP dependencies
 2. Create `.env` file and generate app key
 3. Run database migrations
@@ -42,8 +43,7 @@ This will:
 ### Manual Setup
 
 ```sh
-# Clone the repository
-git clone <your-repo-url>
+# Extract the zip file and open the project folder
 cd job-task
 
 # Install PHP dependencies
@@ -53,8 +53,14 @@ composer install
 cp .env.example .env
 php artisan key:generate
 
-# Database
-touch database/database.sqlite
+# Database — create the database first, then update .env with your MySQL credentials
+# DB_CONNECTION=mysql
+# DB_HOST=127.0.0.1
+# DB_PORT=3306
+# DB_DATABASE=task_management_db
+# DB_USERNAME=root
+# DB_PASSWORD=
+
 php artisan migrate
 
 # Seed sample data (10 projects, 110 tasks)
@@ -68,7 +74,7 @@ npm run build
 ### Running the App
 
 ```sh
-composer dev
+composer run dev
 ```
 
 This starts the Laravel server, queue worker, and Vite dev server concurrently. Visit [http://localhost:8000](http://localhost:8000).
@@ -125,41 +131,47 @@ onEnd: function (evt) {
 }
 ```
 
-#### Step 3: Calculating the New Priority
+#### Step 3: Resolving Neighbor Priorities
 
-The backend receives `taskId`, `previousTaskId`, and `nextTaskId`, then determines the new priority:
+The backend receives `taskId`, `previousTaskId`, and `nextTaskId`. Each defaults to `0` if not provided (dropped at boundary). It then resolves actual priority values — and for edge cases (top/bottom of list), queries the database for the nearest neighbor:
 
 ```php
-private function calculatePriority(?int $previousPriority, ?int $nextPriority): int
-{
-    // Between two tasks
-    if ($previousPriority !== null && $nextPriority !== null) {
-        return $this->findMidpoint($previousPriority, $nextPriority);
-    }
+$prevPriority = $validated['previousTaskId']
+    ? Task::where('id', $validated['previousTaskId'])->value('priority')
+    : 0;
 
-    // End of list
-    if ($previousPriority !== null) {
-        return $this->getNextAvailablePriority($previousPriority + 1);
-    }
+$nextPriority = $validated['nextTaskId']
+    ? Task::where('id', $validated['nextTaskId'])->value('priority')
+    : 0;
 
-    // Beginning of list
-    if ($nextPriority !== null) {
-        return $this->getPreviousAvailablePriority($nextPriority - 1);
-    }
+// Dropped at the very top: find the nearest task below the next one
+if ($prevPriority === 0 && $nextPriority !== 0) {
+    $prevPriority = Task::where('priority', '<', $nextPriority)
+        ->orderByDesc('priority')
+        ->value('priority') ?? 1;
+}
 
-    return 1000; // Only task
+// Dropped at the very bottom: find the nearest task above the previous one
+elseif ($nextPriority === 0 && $prevPriority !== 0) {
+    $nextPriority = Task::where('priority', '>', $prevPriority)
+        ->orderBy('priority')
+        ->value('priority') ?? Task::max('priority') + 1000;
 }
 ```
 
 **Three scenarios:**
 
-| Position | Neighbors | Calculation |
-|----------|-----------|-------------|
-| Between two tasks | prev + next exist | `intdiv(prev + next, 2)`, then find next free slot |
-| End of list | only prev | Increment from `prev + 1` until free |
-| Beginning of list | only next | Decrement from `next - 1` until free |
+| Position          | prevPriority | nextPriority | Resolution                                           |
+| ----------------- | ------------ | ------------ | ---------------------------------------------------- |
+| Between two tasks | set          | set          | Use both directly                                    |
+| End of list       | set          | 0            | Query for nearest task above `prev` to use as `next` |
+| Beginning of list | 0            | set          | Query for nearest task below `next` to use as `prev` |
+
+After resolution, both values are always valid and we call `findMidpoint()`.
 
 #### Step 4: Finding the Midpoint
+
+Every case — including start/end — funnels into the same method:
 
 ```php
 private function findMidpoint(int $prev, int $next): int
@@ -196,13 +208,28 @@ After drag:
   Task D (1500)  ← moved here
   Task B (2000)
   Task C (3000)
+
+Drag Task A to the bottom (after Task D):
+  previousTaskId = D (priority 1500)
+  nextTaskId = null (0)
+
+  // Edge case: query for nearest task above D's priority
+  // nextPriority = Task::where('priority', '>', 1500)->min('priority') = 2000
+  midpoint = (1500 + 2000) / 2 = 1750
+  Task A gets priority 1750
+
+After drag:
+  Task B (2000)
+  Task C (3000)
+  Task D (1500)
+  Task A (1750)  ← moved here
 ```
 
 ### Why This Works Well
 
 - **Single-row update** — Only the dragged task's row is updated, regardless of list size
 - **No race conditions** — No bulk updates means no conflicting writes
-- **Handles edge cases** — Moving to start, end, or between any two tasks
+- **Unified calculation** — Every case (top, middle, bottom) funnels into `findMidpoint()`, keeping logic simple
 - **Collision resolution** — If the midpoint is taken, the algorithm finds the next available slot
 
 ### Limitation
