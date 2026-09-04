@@ -44,7 +44,7 @@ This will:
 
 ```sh
 # Extract the zip file and open the project folder
-cd job-task
+cd task-management
 
 # Install PHP dependencies
 composer install
